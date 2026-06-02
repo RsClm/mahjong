@@ -17,6 +17,33 @@ const MELD_LABELS: Record<MeldType, string> = {
   kan: '杠',
 }
 
+function getSuitAndNumber(tile: Tile): [string, number] | null {
+  const match = tile.match(/^([1-9])([mps])$/)
+  if (!match) return null
+  return [match[2], parseInt(match[1], 10)]
+}
+
+function validateMeld(type: MeldType, tiles: Tile[]): string | null {
+  if (type === 'pon') {
+    if (!tiles.every((t) => t === tiles[0])) return '碰必须是 3 张相同的牌'
+    return null
+  }
+  if (type === 'kan') {
+    if (!tiles.every((t) => t === tiles[0])) return '杠必须是 4 张相同的牌'
+    return null
+  }
+  if (type === 'chi') {
+    const parsed = tiles.map(getSuitAndNumber)
+    if (parsed.some((p) => p === null)) return '吃只能用数牌（万/筒/条）'
+    const suits = parsed.map((p) => p![0])
+    if (suits[0] !== suits[1] || suits[1] !== suits[2]) return '吃必须是同一花色'
+    const nums = parsed.map((p) => p![1]).sort((a, b) => a - b)
+    if (nums[1] !== nums[0] + 1 || nums[2] !== nums[1] + 1) return '吃必须是连续三张顺子'
+    return null
+  }
+  return null
+}
+
 export function HandEditor({
   hand,
   onAddTile,
@@ -29,6 +56,7 @@ export function HandEditor({
   const [meldTiles, setMeldTiles] = useState<Tile[]>([])
   const sortedConcealed = useMemo(() => sortTiles(hand.concealed), [hand.concealed])
   const neededMeldTiles = meldType === 'kan' ? 4 : 3
+  const meldError = meldTiles.length === neededMeldTiles ? validateMeld(meldType, meldTiles) : null
 
   function removeSortedTile(tile: Tile, sortedIndex: number) {
     const previousSameTiles = sortedConcealed.slice(0, sortedIndex).filter((item) => item === tile).length
@@ -49,6 +77,7 @@ export function HandEditor({
 
   function submitMeld() {
     if (meldTiles.length !== neededMeldTiles) return
+    if (meldError) return
     onAddMeld({
       id: crypto.randomUUID(),
       type: meldType,
@@ -130,9 +159,10 @@ export function HandEditor({
             </button>
           ))}
         </div>
-        <button type="button" disabled={meldTiles.length !== neededMeldTiles} onClick={submitMeld}>
+        <button type="button" disabled={meldTiles.length !== neededMeldTiles || !!meldError} onClick={submitMeld}>
           添加{MELD_LABELS[meldType]}
         </button>
+        {meldError && <p className="alert danger" style={{ margin: '4px 0 0' }}>{meldError}</p>}
 
         {hand.melds.length > 0 && (
           <div className="meld-list">

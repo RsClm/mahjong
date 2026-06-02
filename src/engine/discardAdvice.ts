@@ -1,6 +1,5 @@
 import { removeOneTile, sortTiles, type HandState } from './hand'
-import { calculateShanten } from './shanten'
-import { getImprovementTiles, getWinningTiles } from './waits'
+import { calculateShanten, canWin } from './shanten'
 import { TILES, type Tile, tileIndex, tilesToCounts } from './tiles'
 
 export interface DiscardAdvice {
@@ -19,6 +18,38 @@ function remainingCountAfterDiscard(hand: HandState, tile: Tile, discard: Tile):
   return Math.max(0, 4 - counts[tileIndex(tile)])
 }
 
+/**
+ * Single-pass scan over all 34 tile types to get both winning tiles and
+ * improvement tiles after a discard, avoiding two separate full enumerations.
+ */
+function getWaitsAfterDiscard(
+  nextHand: HandState,
+  currentShanten: number,
+  allCountsBeforeDiscard: number[],
+  discard: Tile,
+): { winningTiles: Tile[]; improvementTiles: Tile[] } {
+  const winningTiles: Tile[] = []
+  const improvementTiles: Tile[] = []
+  const handAllCounts = tilesToCounts([
+    ...nextHand.concealed,
+    ...nextHand.melds.flatMap((meld) => meld.tiles),
+  ])
+
+  for (const tile of TILES) {
+    const idx = tileIndex(tile)
+    if (handAllCounts[idx] >= 4) continue
+    const drawn = { ...nextHand, concealed: [...nextHand.concealed, tile] }
+    if (canWin(drawn)) {
+      winningTiles.push(tile)
+    } else {
+      const next = calculateShanten(drawn).shanten
+      if (next < currentShanten) improvementTiles.push(tile)
+    }
+  }
+
+  return { winningTiles, improvementTiles }
+}
+
 function reasonForAdvice(advice: Omit<DiscardAdvice, 'reason'>): string {
   if (advice.winningTiles.length > 0) {
     return `切后听 ${advice.winningTiles.length} 种牌`
@@ -30,14 +61,28 @@ function reasonForAdvice(advice: Omit<DiscardAdvice, 'reason'>): string {
 }
 
 export function getDiscardAdvice(hand: HandState): DiscardAdvice[] {
+  // Only meaningful for 3k+2 (post-draw) hands
+  const n = hand.concealed.length
+  const rem = n - 2
+  if (n < 2 || rem < 0 || rem % 3 !== 0) return []
+
+  const allCountsBeforeDiscard = tilesToCounts([
+    ...hand.concealed,
+    ...hand.melds.flatMap((meld) => meld.tiles),
+  ])
+  const currentShanten = calculateShanten(hand).shanten
   const uniqueDiscards = Array.from(new Set(sortTiles(hand.concealed)))
 
   return uniqueDiscards
     .map((discard) => {
       const nextHand = removeOneTile(hand, discard)
       const afterDiscardShanten = calculateShanten(nextHand).shanten
-      const winningTiles = getWinningTiles(nextHand)
-      const improvementTiles = getImprovementTiles(nextHand)
+      const { winningTiles, improvementTiles } = getWaitsAfterDiscard(
+        nextHand,
+        afterDiscardShanten,
+        allCountsBeforeDiscard,
+        discard,
+      )
       const effectiveTiles = winningTiles.length > 0 ? winningTiles : improvementTiles
       const effectiveTileCount = effectiveTiles.reduce(
         (total, tile) => total + remainingCountAfterDiscard(hand, tile, discard),

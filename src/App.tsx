@@ -23,6 +23,10 @@ function App() {
   const waits = useMemo(() => analyzeWaits(hand), [hand])
   const advice = useMemo(() => getDiscardAdvice(hand), [hand])
 
+  // Determine hand phase: 3k+2 → post-draw (need to discard), 3k+1 → pre-draw (need to draw)
+  const concealedCount = hand.concealed.length
+  const isPostDraw = shanten.isPostDraw
+
   function appendTiles(tiles: Tile[]) {
     setHand((current) => ({ ...current, concealed: [...current.concealed, ...tiles] }))
   }
@@ -70,7 +74,8 @@ function App() {
             <p className="eyebrow">分析结果</p>
             <h2>{shanten.isWinning ? '已和牌' : `${shanten.shanten} 向听`}</h2>
             <p className="muted">
-              暗手牌 {shanten.concealedTileCount} 张，鸣牌 {shanten.fixedMelds} 组。
+              暗手牌 {shanten.concealedTileCount} 张，鸣牌 {shanten.fixedMelds} 组
+              {concealedCount > 0 ? `（${isPostDraw ? '摸牌后，可切牌' : '摸牌前，等待摸牌'}）` : ''}。
             </p>
           </div>
 
@@ -92,19 +97,31 @@ function App() {
 
           <div className="result-block">
             <h3>听牌提示</h3>
-            {waits.winningTiles.length > 0 ? (
-              <p className="tile-line">{formatTiles(waits.winningTiles)}</p>
+            {concealedCount === 0 ? (
+              <p className="muted">请先录入手牌。</p>
+            ) : isPostDraw ? (
+              waits.winningTiles.length > 0 ? (
+                <p className="tile-line">{formatTiles(waits.winningTiles)}</p>
+              ) : (
+                <p className="muted">
+                  当前未听牌。有效进张：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
+                </p>
+              )
             ) : (
               <p className="muted">
-                当前未听牌。有效进张：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
+                摸牌前形态，有效进张（摸哪张可减少向听）：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
               </p>
             )}
           </div>
 
           <div className="result-block">
             <h3>切牌建议</h3>
-            {advice.length === 0 ? (
+            {concealedCount === 0 ? (
               <p className="muted">请先录入暗手牌。</p>
+            ) : !isPostDraw ? (
+              <p className="muted">摸牌后（3k+2 张）才显示切牌建议。</p>
+            ) : advice.length === 0 ? (
+              <p className="muted">暂无建议。</p>
             ) : (
               <ol className="advice-list">
                 {advice.slice(0, 8).map((item) => (

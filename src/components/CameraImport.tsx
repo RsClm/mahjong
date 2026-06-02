@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { recognizeTilesFromImage, type RecognitionResult } from '../vision/recognizeTiles'
 import { type Tile } from '../engine/tiles'
 
@@ -10,11 +10,20 @@ export function CameraImport({ onRecognized }: CameraImportProps) {
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [result, setResult] = useState<RecognitionResult | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const blobUrlRef = useRef<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+    }
+  }, [])
 
   async function handleFile(file: File | undefined) {
     if (!file) return
     setIsLoading(true)
     const recognition = await recognizeTilesFromImage(file)
+    if (blobUrlRef.current) URL.revokeObjectURL(blobUrlRef.current)
+    blobUrlRef.current = recognition.imageUrl
     setResult(recognition)
     setIsLoading(false)
     if (recognition.tiles.length > 0) {
