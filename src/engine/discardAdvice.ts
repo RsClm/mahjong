@@ -25,8 +25,6 @@ function remainingCountAfterDiscard(hand: HandState, tile: Tile, discard: Tile):
 function getWaitsAfterDiscard(
   nextHand: HandState,
   currentShanten: number,
-  allCountsBeforeDiscard: number[],
-  discard: Tile,
 ): { winningTiles: Tile[]; improvementTiles: Tile[] } {
   const winningTiles: Tile[] = []
   const improvementTiles: Tile[] = []
@@ -66,11 +64,6 @@ export function getDiscardAdvice(hand: HandState): DiscardAdvice[] {
   const rem = n - 2
   if (n < 2 || rem < 0 || rem % 3 !== 0) return []
 
-  const allCountsBeforeDiscard = tilesToCounts([
-    ...hand.concealed,
-    ...hand.melds.flatMap((meld) => meld.tiles),
-  ])
-  const currentShanten = calculateShanten(hand).shanten
   const uniqueDiscards = Array.from(new Set(sortTiles(hand.concealed)))
 
   return uniqueDiscards
@@ -80,8 +73,6 @@ export function getDiscardAdvice(hand: HandState): DiscardAdvice[] {
       const { winningTiles, improvementTiles } = getWaitsAfterDiscard(
         nextHand,
         afterDiscardShanten,
-        allCountsBeforeDiscard,
-        discard,
       )
       const effectiveTiles = winningTiles.length > 0 ? winningTiles : improvementTiles
       const effectiveTileCount = effectiveTiles.reduce(
