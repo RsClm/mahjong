@@ -32,12 +32,11 @@ export function CameraImport({ onRecognized }: CameraImportProps) {
   }
 
   return (
-    <section className="card camera-card">
+    <div className="camera-card">
       <div>
-        <p className="eyebrow">拍照导入</p>
         <h2>上传手牌照片</h2>
-        <p className="muted">
-          免费 GitHub Pages 版本在手机本地处理照片，不上传服务器。识别结果会进入手牌区，建议核对后分析。
+        <p className="muted small">
+          照片只在本机预览，不上传服务器；识别为实验功能，结果请人工核对。
         </p>
       </div>
 
@@ -64,6 +63,6 @@ export function CameraImport({ onRecognized }: CameraImportProps) {
           <p>{result.message}</p>
         </div>
       )}
-    </section>
+    </div>
   )
 }

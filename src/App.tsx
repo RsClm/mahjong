@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import './App.css'
 import { CameraImport } from './components/CameraImport'
+import { HandBoard } from './components/HandBoard'
 import { HandEditor } from './components/HandEditor'
+import { TileChip } from './components/TileChip'
 import {
   addTile,
   createEmptyHand,
   removeTileAt,
-  sortTiles,
   validateHand,
   type HandState,
   type Meld,
@@ -14,19 +15,27 @@ import {
 import { getDiscardAdvice } from './engine/discardAdvice'
 import { calculateShanten } from './engine/shanten'
 import { analyzeWaits } from './engine/waits'
-import { formatTiles, TILE_SHORT_LABELS, type Tile } from './engine/tiles'
+import { TILE_SHORT_LABELS, type Tile } from './engine/tiles'
+
+const ADVICE_PREVIEW_COUNT = 4
 
 function App() {
   const [hand, setHand] = useState<HandState>(() => createEmptyHand())
+  const [showAllAdvice, setShowAllAdvice] = useState(false)
   const validation = useMemo(() => validateHand(hand), [hand])
   const shanten = useMemo(() => calculateShanten(hand), [hand])
   const waits = useMemo(() => analyzeWaits(hand), [hand])
   const advice = useMemo(() => getDiscardAdvice(hand), [hand])
-  const bestAdvice = advice.length > 0 ? advice[0] : null
 
-  // Determine hand phase: 3k+2 → post-draw (need to discard), 3k+1 → pre-draw (need to draw)
   const concealedCount = hand.concealed.length
   const isPostDraw = shanten.isPostDraw
+  const bestAdvice = advice.length > 0 ? advice[0] : null
+  const postDrawTenpai =
+    isPostDraw && bestAdvice && bestAdvice.afterDiscardShanten === 0 && bestAdvice.winningTiles.length > 0
+      ? bestAdvice
+      : null
+  const preDrawTenpai = !isPostDraw && shanten.shanten === 0 && waits.winningTiles.length > 0
+  const visibleAdvice = showAllAdvice ? advice : advice.slice(0, ADVICE_PREVIEW_COUNT)
 
   function appendTiles(tiles: Tile[]) {
     setHand((current) => ({ ...current, concealed: [...current.concealed, ...tiles] }))
@@ -50,112 +59,128 @@ function App() {
 
   return (
     <main className="app-shell">
-      <header className="hero-panel">
-        <p className="eyebrow">手机可用 · 本地分析 · 免费部署</p>
+      <header className="top-bar">
         <h1>麻将助手</h1>
-        <p>
-          录入暗手牌和鸣牌后，自动计算普通麻将的向听数、听哪些牌，并给出切牌建议。拍照导入会保留照片预览，方便边看边校正。
-        </p>
+        <span className="muted small">本地分析 · 照片不外传</span>
       </header>
 
-      <CameraImport onRecognized={appendTiles} />
+      <HandBoard
+        hand={hand}
+        phaseText={concealedCount > 0 ? (isPostDraw ? '摸牌后' : '摸牌前') : undefined}
+        onRemoveTile={removeConcealed}
+        onRemoveMeld={removeMeld}
+      />
 
-      <div className="workspace">
-        <HandEditor
-          hand={hand}
-          onAddTile={appendTile}
-          onRemoveTile={removeConcealed}
-          onAddMeld={addMeld}
-          onRemoveMeld={removeMeld}
-          onClear={() => setHand(createEmptyHand())}
-        />
+      <section className="card analysis-card">
+        <div className="analysis-head">
+          <h2>{shanten.isWinning ? '已和牌' : `${shanten.shanten} 向听`}</h2>
+          <span className="muted small">
+            暗手牌 {shanten.concealedTileCount} 张
+            {shanten.fixedMelds > 0 ? ` · 鸣牌 ${shanten.fixedMelds} 组` : ''}
+          </span>
+        </div>
 
-        <section className="card result-panel">
-          <div>
-            <p className="eyebrow">分析结果</p>
-            <h2>{shanten.isWinning ? '已和牌' : `${shanten.shanten} 向听`}</h2>
-            <p className="muted">
-              暗手牌 {shanten.concealedTileCount} 张，鸣牌 {shanten.fixedMelds} 组
-              {concealedCount > 0 ? `（${isPostDraw ? '摸牌后，可切牌' : '摸牌前，等待摸牌'}）` : ''}。
-            </p>
+        {!validation.isValid && (
+          <div className="alert danger">
+            {validation.errors.map((error) => (
+              <p key={error}>{error}</p>
+            ))}
           </div>
+        )}
 
-          {!validation.isValid && (
-            <div className="alert danger">
-              {validation.errors.map((error) => (
-                <p key={error}>{error}</p>
+        {validation.warnings.length > 0 && (
+          <div className="alert">
+            {validation.warnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </div>
+        )}
+
+        {concealedCount === 0 ? (
+          <p className="muted small">录入后自动计算向听、听牌与切牌建议。</p>
+        ) : shanten.isWinning ? (
+          <p className="muted small">手牌已成和，可核对录入。</p>
+        ) : postDrawTenpai ? (
+          <div className="analysis-row">
+            <span className="row-label">切 {TILE_SHORT_LABELS[postDrawTenpai.discard]} 后听牌</span>
+            <span className="chip-row">
+              {postDrawTenpai.winningTiles.map((tile) => (
+                <TileChip key={tile} tile={tile} size="sm" />
               ))}
-            </div>
-          )}
-
-          {validation.warnings.length > 0 && (
-            <div className="alert">
-              {validation.warnings.map((warning) => (
-                <p key={warning}>{warning}</p>
-              ))}
-            </div>
-          )}
-
-          <div className="result-block">
-            <h3>听牌提示</h3>
-            {concealedCount === 0 ? (
-              <p className="muted">请先录入手牌。</p>
-            ) : shanten.isWinning ? (
-              <p className="tile-line">手牌已成和，可核对录入。</p>
-            ) : isPostDraw ? (
-              bestAdvice && bestAdvice.afterDiscardShanten === 0 && bestAdvice.winningTiles.length > 0 ? (
-                <p className="tile-line">
-                  切 {TILE_SHORT_LABELS[bestAdvice.discard]} 后听牌：{formatTiles(bestAdvice.winningTiles)}
-                  {bestAdvice.effectiveTileCount > 0 ? `（剩余约 ${bestAdvice.effectiveTileCount} 张）` : ''}
-                </p>
-              ) : (
-                <p className="muted">
-                  当前未听牌。有效进张：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
-                </p>
-              )
-            ) : shanten.shanten === 0 && waits.winningTiles.length > 0 ? (
-              <p className="tile-line">听牌：{formatTiles(waits.winningTiles)}</p>
-            ) : (
-              <p className="muted">
-                摸牌前形态，有效进张（摸哪张可减少向听）：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
-              </p>
+            </span>
+            {postDrawTenpai.effectiveTileCount > 0 && (
+              <span className="muted small">约 {postDrawTenpai.effectiveTileCount} 张</span>
             )}
           </div>
-
-          <div className="result-block">
-            <h3>切牌建议</h3>
-            {concealedCount === 0 ? (
-              <p className="muted">请先录入暗手牌。</p>
-            ) : !isPostDraw ? (
-              <p className="muted">摸牌后（3k+2 张）才显示切牌建议。</p>
-            ) : advice.length === 0 ? (
-              <p className="muted">暂无建议。</p>
-            ) : (
-              <ol className="advice-list">
-                {advice.slice(0, 8).map((item) => (
-                  <li key={item.discard}>
-                    <div className="advice-main">
-                      <span className="discard-tile">切 {TILE_SHORT_LABELS[item.discard]}</span>
-                      <span>{item.reason}</span>
-                    </div>
-                    <p>
-                      {item.winningTiles.length > 0
-                        ? `听牌：${formatTiles(item.winningTiles)}`
-                        : `进张：${formatTiles(item.improvementTiles)}`}
-                      {item.effectiveTileCount > 0 ? `，剩余约 ${item.effectiveTileCount} 张` : ''}
-                    </p>
-                  </li>
+        ) : preDrawTenpai ? (
+          <div className="analysis-row">
+            <span className="row-label">听牌</span>
+            <span className="chip-row">
+              {waits.winningTiles.map((tile) => (
+                <TileChip key={tile} tile={tile} size="sm" />
+              ))}
+            </span>
+          </div>
+        ) : (
+          <div className="analysis-row">
+            <span className="row-label">进张</span>
+            {waits.improvementTiles.length > 0 ? (
+              <span className="chip-row">
+                {waits.improvementTiles.map((tile) => (
+                  <TileChip key={tile} tile={tile} size="sm" />
                 ))}
-              </ol>
+              </span>
+            ) : (
+              <span className="muted small">暂无</span>
             )}
           </div>
+        )}
 
-          <div className="result-block">
-            <h3>当前手牌</h3>
-            <p className="tile-line">{formatTiles(sortTiles(hand.concealed))}</p>
+        {isPostDraw && !shanten.isWinning && advice.length > 0 && (
+          <div className="advice-compact">
+            {visibleAdvice.map((item) => (
+              <div className="advice-item" key={item.discard}>
+                <span className="row-label">切</span>
+                <TileChip tile={item.discard} size="sm" />
+                {item.winningTiles.length > 0 ? (
+                  <>
+                    <span className="muted small">听</span>
+                    <span className="chip-row">
+                      {item.winningTiles.map((tile) => (
+                        <TileChip key={tile} tile={tile} size="sm" />
+                      ))}
+                    </span>
+                  </>
+                ) : item.improvementTiles.length > 0 ? (
+                  <>
+                    <span className="muted small">进张</span>
+                    <span className="chip-row">
+                      {item.improvementTiles.map((tile) => (
+                        <TileChip key={tile} tile={tile} size="sm" />
+                      ))}
+                    </span>
+                  </>
+                ) : (
+                  <span className="muted small">{item.reason}</span>
+                )}
+                {item.effectiveTileCount > 0 && <span className="muted small">约 {item.effectiveTileCount} 张</span>}
+              </div>
+            ))}
+            {advice.length > ADVICE_PREVIEW_COUNT && (
+              <button type="button" className="link-button" onClick={() => setShowAllAdvice((current) => !current)}>
+                {showAllAdvice ? '收起' : `展开其余 ${advice.length - ADVICE_PREVIEW_COUNT} 条`}
+              </button>
+            )}
           </div>
-        </section>
-      </div>
+        )}
+      </section>
+
+      <HandEditor onAddTile={appendTile} onAddMeld={addMeld} onClear={() => setHand(createEmptyHand())} />
+
+      <details className="collapse-card">
+        <summary>拍照导入（实验功能，点击展开）</summary>
+        <CameraImport onRecognized={appendTiles} />
+      </details>
     </main>
   )
 }

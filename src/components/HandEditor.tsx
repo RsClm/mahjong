@@ -1,13 +1,11 @@
-import { useMemo, useState } from 'react'
-import { sortTiles, type HandState, type Meld, type MeldType } from '../engine/hand'
+import { useState } from 'react'
+import { type Meld, type MeldType } from '../engine/hand'
 import { TILE_GROUPS, TILE_SHORT_LABELS, type Tile } from '../engine/tiles'
+import { TileChip } from './TileChip'
 
 interface HandEditorProps {
-  hand: HandState
   onAddTile: (tile: Tile) => void
-  onRemoveTile: (index: number) => void
   onAddMeld: (meld: Meld) => void
-  onRemoveMeld: (id: string) => void
   onClear: () => void
 }
 
@@ -17,6 +15,8 @@ const MELD_LABELS: Record<MeldType, string> = {
   kan: '杠',
 }
 
+const MELD_TYPES: MeldType[] = ['chi', 'pon', 'kan']
+
 function getSuitAndNumber(tile: Tile): [string, number] | null {
   const match = tile.match(/^([1-9])([mps])$/)
   if (!match) return null
@@ -25,155 +25,130 @@ function getSuitAndNumber(tile: Tile): [string, number] | null {
 
 function validateMeld(type: MeldType, tiles: Tile[]): string | null {
   if (type === 'pon') {
-    if (!tiles.every((t) => t === tiles[0])) return '碰必须是 3 张相同的牌'
+    if (!tiles.every((t) => t === tiles[0])) return '碰需要 3 张相同的牌'
     return null
   }
   if (type === 'kan') {
-    if (!tiles.every((t) => t === tiles[0])) return '杠必须是 4 张相同的牌'
+    if (!tiles.every((t) => t === tiles[0])) return '杠需要 4 张相同的牌'
     return null
   }
-  if (type === 'chi') {
-    const parsed = tiles.map(getSuitAndNumber)
-    if (parsed.some((p) => p === null)) return '吃只能用数牌（万/筒/条）'
-    const suits = parsed.map((p) => p![0])
-    if (suits[0] !== suits[1] || suits[1] !== suits[2]) return '吃必须是同一花色'
-    const nums = parsed.map((p) => p![1]).sort((a, b) => a - b)
-    if (nums[1] !== nums[0] + 1 || nums[2] !== nums[1] + 1) return '吃必须是连续三张顺子'
-    return null
-  }
+  const parsed = tiles.map(getSuitAndNumber)
+  if (parsed.some((item) => item === null)) return '吃只能用数牌（万/筒/条）'
+  const suits = parsed.map((item) => item![0])
+  if (suits[0] !== suits[1] || suits[1] !== suits[2]) return '吃需要同一花色'
+  const numbers = parsed.map((item) => item![1]).sort((a, b) => a - b)
+  if (numbers[1] !== numbers[0] + 1 || numbers[2] !== numbers[1] + 1) return '吃需要连续三张顺子'
   return null
 }
 
-export function HandEditor({
-  hand,
-  onAddTile,
-  onRemoveTile,
-  onAddMeld,
-  onRemoveMeld,
-  onClear,
-}: HandEditorProps) {
+export function HandEditor({ onAddTile, onAddMeld, onClear }: HandEditorProps) {
+  const [mode, setMode] = useState<'hand' | 'meld'>('hand')
+  const [activeGroup, setActiveGroup] = useState(0)
   const [meldType, setMeldType] = useState<MeldType>('chi')
   const [meldTiles, setMeldTiles] = useState<Tile[]>([])
-  const sortedConcealed = useMemo(() => sortTiles(hand.concealed), [hand.concealed])
+
+  const group = TILE_GROUPS[activeGroup]
   const neededMeldTiles = meldType === 'kan' ? 4 : 3
   const meldError = meldTiles.length === neededMeldTiles ? validateMeld(meldType, meldTiles) : null
 
-  function removeSortedTile(tile: Tile, sortedIndex: number) {
-    const previousSameTiles = sortedConcealed.slice(0, sortedIndex).filter((item) => item === tile).length
-    let seen = 0
-    const originalIndex = hand.concealed.findIndex((item) => {
-      if (item !== tile) return false
-      if (seen === previousSameTiles) return true
-      seen += 1
-      return false
-    })
-    if (originalIndex >= 0) onRemoveTile(originalIndex)
-  }
-
-  function addMeldTile(tile: Tile) {
+  function handleTilePress(tile: Tile) {
+    if (mode === 'hand') {
+      onAddTile(tile)
+      return
+    }
     if (meldTiles.length >= neededMeldTiles) return
     setMeldTiles((current) => [...current, tile])
   }
 
+  function changeMeldType(next: MeldType) {
+    setMeldType(next)
+    setMeldTiles([])
+  }
+
   function submitMeld() {
-    if (meldTiles.length !== neededMeldTiles) return
-    if (meldError) return
-    onAddMeld({
-      id: crypto.randomUUID(),
-      type: meldType,
-      tiles: [...meldTiles],
-    })
+    if (meldTiles.length !== neededMeldTiles || meldError) return
+    onAddMeld({ id: crypto.randomUUID(), type: meldType, tiles: [...meldTiles] })
     setMeldTiles([])
   }
 
   return (
     <section className="card hand-editor">
-      <div className="section-title">
-        <div>
-          <p className="eyebrow">手牌录入</p>
-          <h2>点选牌面</h2>
+      <div className="editor-head">
+        <div className="segmented">
+          <button type="button" className={mode === 'hand' ? 'active' : ''} onClick={() => setMode('hand')}>
+            录入手牌
+          </button>
+          <button type="button" className={mode === 'meld' ? 'active' : ''} onClick={() => setMode('meld')}>
+            加鸣牌
+          </button>
         </div>
         <button type="button" className="ghost-button" onClick={onClear}>
           清空
         </button>
       </div>
 
-      <div className="tile-groups">
-        {TILE_GROUPS.map((group) => (
-          <div className="tile-group" key={group.title}>
-            <h3>{group.title}</h3>
-            <div className="tile-grid">
-              {group.tiles.map((tile) => (
-                <button type="button" className="tile-button" key={tile} onClick={() => onAddTile(tile)}>
-                  {TILE_SHORT_LABELS[tile]}
-                </button>
-              ))}
-            </div>
+      {mode === 'meld' && (
+        <div className="meld-controls">
+          <div className="tabs">
+            {MELD_TYPES.map((type) => (
+              <button key={type} type="button" className={meldType === type ? 'active' : ''} onClick={() => changeMeldType(type)}>
+                {MELD_LABELS[type]}
+              </button>
+            ))}
           </div>
+          <div className="draft-row">
+            {meldTiles.map((tile, index) => (
+              <TileChip
+                key={`${tile}-${index}`}
+                tile={tile}
+                size="md"
+                title="点击移除"
+                onClick={() => setMeldTiles((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+              />
+            ))}
+            <span className="muted small">
+              已选 {meldTiles.length}/{neededMeldTiles}
+            </span>
+            {meldError && <span className="meld-error">{meldError}</span>}
+          </div>
+        </div>
+      )}
+
+      <div className="tabs">
+        {TILE_GROUPS.map((groupItem, index) => (
+          <button
+            key={groupItem.title}
+            type="button"
+            className={activeGroup === index ? 'active' : ''}
+            onClick={() => setActiveGroup(index)}
+          >
+            {groupItem.title.charAt(0)}
+          </button>
         ))}
       </div>
 
-      <div className="current-hand">
-        <div className="section-title compact">
-          <h3>暗手牌 {hand.concealed.length} 张</h3>
-        </div>
-        {sortedConcealed.length === 0 ? (
-          <p className="empty">还没有录入手牌。</p>
-        ) : (
-          <div className="selected-tiles">
-            {sortedConcealed.map((tile, index) => (
-              <button type="button" className="selected-tile" key={`${tile}-${index}`} onClick={() => removeSortedTile(tile, index)}>
-                {TILE_SHORT_LABELS[tile]}
-              </button>
-            ))}
-          </div>
-        )}
+      <div className="keyboard-row">
+        {group.tiles.map((tile) => (
+          <TileChip
+            key={tile}
+            tile={tile}
+            size="key"
+            title={`${mode === 'hand' ? '录入' : '选入'} ${TILE_SHORT_LABELS[tile]}`}
+            onClick={() => handleTilePress(tile)}
+          />
+        ))}
       </div>
 
-      <div className="meld-editor">
-        <div className="section-title compact">
-          <h3>鸣牌</h3>
-          <select value={meldType} onChange={(event) => setMeldType(event.target.value as MeldType)}>
-            <option value="chi">吃</option>
-            <option value="pon">碰</option>
-            <option value="kan">杠</option>
-          </select>
-        </div>
-        <p className="muted">先选择鸣牌类型，再点 {neededMeldTiles} 张组成一组。</p>
-        <div className="selected-tiles">
-          {meldTiles.map((tile, index) => (
-            <button
-              type="button"
-              className="selected-tile draft"
-              key={`${tile}-${index}`}
-              onClick={() => setMeldTiles((current) => current.filter((_, tileIndex) => tileIndex !== index))}
-            >
-              {TILE_SHORT_LABELS[tile]}
-            </button>
-          ))}
-        </div>
-        <div className="tile-grid small">
-          {TILE_GROUPS.flatMap((group) => group.tiles).map((tile) => (
-            <button type="button" className="tile-button" key={`meld-${tile}`} onClick={() => addMeldTile(tile)}>
-              {TILE_SHORT_LABELS[tile]}
-            </button>
-          ))}
-        </div>
-        <button type="button" disabled={meldTiles.length !== neededMeldTiles || !!meldError} onClick={submitMeld}>
+      {mode === 'meld' && (
+        <button
+          type="button"
+          className="primary-button"
+          disabled={meldTiles.length !== neededMeldTiles || !!meldError}
+          onClick={submitMeld}
+        >
           添加{MELD_LABELS[meldType]}
         </button>
-        {meldError && <p className="alert danger" style={{ margin: '4px 0 0' }}>{meldError}</p>}
-
-        {hand.melds.length > 0 && (
-          <div className="meld-list">
-            {hand.melds.map((meld) => (
-              <button type="button" className="meld-pill" key={meld.id} onClick={() => onRemoveMeld(meld.id)}>
-                {MELD_LABELS[meld.type]} {meld.tiles.map((tile) => TILE_SHORT_LABELS[tile]).join(' ')}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
+      )}
     </section>
   )
 }
