@@ -98,7 +98,8 @@ function searchBest(
  * Handles any 3k+1 or 3k+2 sized hand.
  *
  * 3k+2 tiles → aiming for k melds + 1 pair (摸牌后形)
- * 3k+1 tiles → aiming for k melds, no pair (未摸牌/打牌后形)
+ * 3k+1 tiles → one tile short of the 3k+2 winning shape (摸牌前形),
+ *   which at 13 tiles matches the classic shanten definition
  *
  * k is capped at (4 - fixedMelds) since fixed melds already count.
  */
@@ -120,89 +121,29 @@ function inferShape(concealedCount: number, fixedMelds: number): { neededMelds: 
 }
 
 function normalShantenFromCounts(counts: number[], fixedMelds: number, concealedCount: number): number {
-  const { neededMelds, needsPair } = inferShape(concealedCount, fixedMelds)
+  const { neededMelds } = inferShape(concealedCount, fixedMelds)
   const best = { shanten: neededMelds * 2 }
-  if (needsPair) {
-    searchBest([...counts], 0, 0, 0, neededMelds, best)
-  } else {
-    searchBestNoPair([...counts], 0, 0, neededMelds, best)
-  }
+  searchBest([...counts], 0, 0, 0, neededMelds, best)
   return Math.max(-1, best.shanten)
-}
-
-/**
- * Variant of searchBest for 3k+1 hands: no pair needed, only melds and taatsu.
- * Shanten = neededMelds*2 - melds*2 - taatsu
- */
-function searchBestNoPair(
-  counts: number[],
-  melds: number,
-  taatsu: number,
-  neededMelds: number,
-  best: { shanten: number },
-): void {
-  const index = firstNonZero(counts)
-  if (index < 0) {
-    const s = neededMelds * 2 - melds * 2 - taatsu
-    if (s < best.shanten) best.shanten = s
-    return
-  }
-
-  let remaining = 0
-  for (const c of counts) remaining += c
-  if (neededMelds * 2 - melds * 2 - taatsu - maxImprovementBound(remaining) >= best.shanten) return
-
-  if (counts[index] >= 3) {
-    counts[index] -= 3
-    searchBestNoPair(counts, melds + 1, taatsu, neededMelds, best)
-    counts[index] += 3
-  }
-
-  if (canRemoveRun(counts, index)) {
-    counts[index] -= 1
-    counts[index + 1] -= 1
-    counts[index + 2] -= 1
-    searchBestNoPair(counts, melds + 1, taatsu, neededMelds, best)
-    counts[index] += 1
-    counts[index + 1] += 1
-    counts[index + 2] += 1
-  }
-
-  if (index < 27 && index % 9 <= 7 && counts[index + 1] > 0) {
-    counts[index] -= 1
-    counts[index + 1] -= 1
-    searchBestNoPair(counts, melds, taatsu + 1, neededMelds, best)
-    counts[index] += 1
-    counts[index + 1] += 1
-  }
-
-  if (index < 27 && index % 9 <= 6 && counts[index + 2] > 0) {
-    counts[index] -= 1
-    counts[index + 2] -= 1
-    searchBestNoPair(counts, melds, taatsu + 1, neededMelds, best)
-    counts[index] += 1
-    counts[index + 2] += 1
-  }
-
-  counts[index] -= 1
-  searchBestNoPair(counts, melds, taatsu, neededMelds, best)
-  counts[index] += 1
 }
 
 function chiitoitsuShanten(counts: number[], fixedMelds: number, concealedCount: number): number {
   // Chiitoitsu only applies when there are no fixed melds and at least 7 concealed tiles
   if (fixedMelds > 0 || concealedCount < 7) return Infinity
   const pairs = counts.reduce((acc, c) => acc + (c >= 2 ? 1 : 0), 0)
-  return 6 - pairs
+  const kinds = counts.reduce((acc, c) => acc + (c > 0 ? 1 : 0), 0)
+  return 6 - pairs + Math.max(0, 7 - kinds)
 }
 
 function isWinningCounts(counts: number[], neededMelds: number, needsPair: boolean): boolean {
   if (neededMelds === 0) {
-    return counts.every((count) => count === 0) || (needsPair && counts.some((count) => count === 2))
+    const remaining = counts.reduce((total, count) => total + count, 0)
+    if (!needsPair) return remaining === 0
+    return remaining === 2 && counts.some((count) => count === 2)
   }
 
   const index = firstNonZero(counts)
-  if (index < 0) return neededMelds === 0 && !needsPair
+  if (index < 0) return false
 
   if (needsPair && counts[index] >= 2) {
     counts[index] -= 2

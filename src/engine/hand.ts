@@ -90,10 +90,12 @@ export function validateHand(hand: HandState): HandValidation {
     }
   }
 
+  const kanCount = hand.melds.filter((meld) => meld.type === 'kan').length
   const totalTileCount =
     hand.concealed.length + hand.melds.reduce((total, meld) => total + meld.tiles.length, 0)
-  if (totalTileCount > 18) {
-    warnings.push('当前张数较多，请确认是否把补杠/暗杠重复录入')
+  const maxTileCount = 14 + kanCount
+  if (totalTileCount > maxTileCount) {
+    errors.push(`总张数 ${totalTileCount} 张，超过上限 ${maxTileCount} 张（14 张和牌形，每个杠额外 +1 张）`)
   }
 
   return { isValid: errors.length === 0, errors, warnings }

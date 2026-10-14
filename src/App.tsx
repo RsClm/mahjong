@@ -22,6 +22,7 @@ function App() {
   const shanten = useMemo(() => calculateShanten(hand), [hand])
   const waits = useMemo(() => analyzeWaits(hand), [hand])
   const advice = useMemo(() => getDiscardAdvice(hand), [hand])
+  const bestAdvice = advice.length > 0 ? advice[0] : null
 
   // Determine hand phase: 3k+2 → post-draw (need to discard), 3k+1 → pre-draw (need to draw)
   const concealedCount = hand.concealed.length
@@ -99,14 +100,21 @@ function App() {
             <h3>听牌提示</h3>
             {concealedCount === 0 ? (
               <p className="muted">请先录入手牌。</p>
+            ) : shanten.isWinning ? (
+              <p className="tile-line">手牌已成和，可核对录入。</p>
             ) : isPostDraw ? (
-              waits.winningTiles.length > 0 ? (
-                <p className="tile-line">{formatTiles(waits.winningTiles)}</p>
+              bestAdvice && bestAdvice.afterDiscardShanten === 0 && bestAdvice.winningTiles.length > 0 ? (
+                <p className="tile-line">
+                  切 {TILE_SHORT_LABELS[bestAdvice.discard]} 后听牌：{formatTiles(bestAdvice.winningTiles)}
+                  {bestAdvice.effectiveTileCount > 0 ? `（剩余约 ${bestAdvice.effectiveTileCount} 张）` : ''}
+                </p>
               ) : (
                 <p className="muted">
                   当前未听牌。有效进张：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
                 </p>
               )
+            ) : shanten.shanten === 0 && waits.winningTiles.length > 0 ? (
+              <p className="tile-line">听牌：{formatTiles(waits.winningTiles)}</p>
             ) : (
               <p className="muted">
                 摸牌前形态，有效进张（摸哪张可减少向听）：{waits.improvementTiles.length > 0 ? formatTiles(waits.improvementTiles) : '暂无'}
