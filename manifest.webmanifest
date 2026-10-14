@@ -1,0 +1,10 @@
+{
+  "name": "麻将助手",
+  "short_name": "麻将助手",
+  "description": "本地分析切牌建议、听牌提示和拍照校正的麻将助手。",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": []
+}
