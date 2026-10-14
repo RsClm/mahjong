@@ -185,7 +185,8 @@ button {
 
 .tile-group-inline {
   display: inline-flex;
-  gap: 3px;
+  flex-wrap: wrap;
+  gap: 5px 3px;
 }
 
 .meld-pill {
